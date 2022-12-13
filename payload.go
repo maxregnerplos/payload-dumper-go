@@ -333,86 +333,7 @@ func (p *Payload) Extract(partition *chromeos_update_engine.PartitionUpdate, out
 
 	return nil
 }
-
-
-			if int64(n) != expectedUncompressedBlockSize {
-				return fmt.Errorf("Verify failed (Unexpected bytes written): %s (%d != %d)", name, n, expectedUncompressedBlockSize)
-			}
-			break
-
-		case chromeos_update_engine.InstallOperation_REPLACE_XZ:
-			reader := xz.NewDecompressionReader(teeReader)
-			n, err := io.Copy(out, &reader)
-			if err != nil {
-				return err
-			}
-			reader.Close()
-			if n != expectedUncompressedBlockSize {
-				return fmt.Errorf("Verify failed (Unexpected bytes written): %s (%d != %d)", name, n, expectedUncompressedBlockSize)
-			}
-
-			break
-
-		case chromeos_update_engine.InstallOperation_REPLACE_BZ:
-			reader := bzip2.NewReader(teeReader)
-			n, err := io.Copy(out, reader)
-			if err != nil {
-				return err
-			}
-			if n != expectedUncompressedBlockSize {
-				return fmt.Errorf("Verify failed (Unexpected bytes written): %s (%d != %d)", name, n, expectedUncompressedBlockSize)
-			}
-			break
-
-		case chromeos_update_engine.InstallOperation_ZERO:
-			reader := bytes.NewReader(make([]byte, expectedUncompressedBlockSize))
-			n, err := io.Copy(out, reader)
-			if err != nil {
-				return err
-			}
-
-			if n != expectedUncompressedBlockSize {
-				return fmt.Errorf("Verify failed (Unexpected bytes written): %s (%d != %d)", name, n, expectedUncompressedBlockSize)
-			}
-			break
-
-		default:
-			return fmt.Errorf("Unhandled operation type: %s", operation.GetType().String())
-		}
-
-		// verify hash
-		hash := hex.EncodeToString(bufSha.Sum(nil))
-		expectedHash := hex.EncodeToString(operation.GetDataSha256Hash())
-		if expectedHash != "" && hash != expectedHash {
-			return fmt.Errorf("Verify failed (Checksum mismatch): %s (%s != %s)", name, hash, expectedHash)
-		}
-	}
-
-	return nil
 }
-
-func (p *Payload) worker() {
-	for req := range p.requests {
-		partition := req.partition
-		targetDirectory := req.targetDirectory
-
-		name := fmt.Sprintf("%s.img", partition.GetPartitionName())
-		filepath := fmt.Sprintf("%s/%s", targetDirectory, name)
-		file, err := os.OpenFile(filepath, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0755)
-		if err != nil {
-		}
-		if err := p.Extract(partition, file); err != nil {
-			fmt.Println(err.Error())
-		}
-
-		p.workerWG.Done()
-	}
-}
-
-func (p *Payload) spawnExtractWorkers(n int) {
-	for i := 0; i < n; i++ {
-		go p.worker()
-	}
 }
 
 func (p *Payload) ExtractSelected(targetDirectory string, partitions []string) error {
@@ -450,5 +371,3 @@ func (p *Payload) ExtractSelected(targetDirectory string, partitions []string) e
 func (p *Payload) ExtractAll(targetDirectory string) error {
 	return p.ExtractSelected(targetDirectory, nil)
 }
-
-
