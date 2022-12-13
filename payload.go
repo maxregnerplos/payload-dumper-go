@@ -681,31 +681,6 @@ func (p *Payload) Extract(partition *chromeos_update_engine.PartitionUpdate, out
 
 	return nil
 }
-
-func (p *Payload) worker() {
-	for req := range p.requests {
-		partition := req.partition
-		targetDirectory := req.targetDirectory
-
-		name := fmt.Sprintf("%s.img", partition.GetPartitionName())
-		filepath := fmt.Sprintf("%s/%s", targetDirectory, name)
-		file, err := os.OpenFile(filepath, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0755)
-		if err != nil {
-		}
-		if err := p.Extract(partition, file); err != nil {
-			fmt.Println(err.Error())
-		}
-
-		p.workerWG.Done()
-	}
-}
-
-func (p *Payload) spawnExtractWorkers(n int) {
-	for i := 0; i < n; i++ {
-		go p.worker()
-	}
-}
-
 func (p *Payload) ExtractSelected(targetDirectory string, partitions []string) error {
 	if !p.initialized {
 		return errors.New("Payload has not been initialized")
