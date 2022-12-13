@@ -45,11 +45,13 @@ func extractPayloadBin(filename string) string {
 	return ""
 }
 
+
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	var (
 		list            bool
+		repack      bool
 		partitions      string
 		outputDirectory string
 		concurrency     int
@@ -57,8 +59,10 @@ func main() {
 
 	flag.IntVar(&concurrency, "c", 4, "Number of multiple workers to extract (shorthand)")
 	flag.IntVar(&concurrency, "concurrency", 4, "Number of multiple workers to extract")
-	flag.BoolVar(&list, "l", false, "Show list of partitions in payload.bin (shorthand)")
-	flag.BoolVar(&list, "list", false, "Show list of partitions in payload.bin")
+	flag.BoolVar(&list, "l", false, "List partitions (shorthand)")
+	flag.BoolVar(&list, "list", false, "List partitions")
+	flag.BoolVar(&repack, "r", false, "Repack payload.bin (shorthand)")
+	flag.BoolVar(&repack, "repack", false, "Repack payload.bin")
 	flag.StringVar(&outputDirectory, "o", "", "Set output directory (shorthand)")
 	flag.StringVar(&outputDirectory, "output", "", "Set output directory")
 	flag.StringVar(&partitions, "p", "", "Dump only selected partitions (comma-separated) (shorthand)")
@@ -121,7 +125,6 @@ func main() {
 		}
 	}
 }
-
 func usage() {
 	fmt.Fprintf(os.Stderr, "Usage: %s [options] [inputfile]\n", os.Args[0])
 	flag.PrintDefaults()
