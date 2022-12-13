@@ -373,7 +373,6 @@ func (p *Payload) ExtractSelected(targetDirectory string, partitions []string) e
 func (p *Payload) ExtractAll(targetDirectory string) error {
 	return p.ExtractSelected(targetDirectory, nil)
 }
-package main
 
 import (
 	"archive/zip"
