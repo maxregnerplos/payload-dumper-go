@@ -150,72 +150,7 @@ func (p *Payload) readMetadataSignature() (*chromeos_update_engine.Signatures, e
 		return nil, err
 	}
 
-	buf := make([]byte, p.header.MetadataSignatureLen)
-	if _, err := p.file.Read(buf); err != nil {
-		return nil, err
-	}
-	signatures := &chromeos_update_engine.Signatures{}
-	if err := proto.Unmarshal(buf, signatures); err != nil {
-		return nil, err
-	}
-
-	return signatures, nil
-}
-
-func (p *Payload) Init() error {
-	// Read Header
-	p.header = &payloadHeader{
-		payload: p,
-	}
-	if err := p.header.ReadFromPayload(); err != nil {
-		return err
-	}
-
-	// Read Manifest
-	deltaArchiveManifest, err := p.readManifest()
-	if err != nil {
-		return err
-	}
-	p.deltaArchiveManifest = deltaArchiveManifest
-
-	// Read Signatures
-	signatures, err := p.readMetadataSignature()
-	if err != nil {
-		return err
-	}
-	p.signatures = signatures
-
-	// Update sizes
-	p.metadataSize = int64(p.header.Size + p.header.ManifestLen)
-	p.dataOffset = p.metadataSize + int64(p.header.MetadataSignatureLen)
-
-	fmt.Println("Found partitions:")
-	for i, partition := range p.deltaArchiveManifest.Partitions {
-		fmt.Printf("%s (%s)", partition.GetPartitionName(), humanize.Bytes(*partition.GetNewPartitionInfo().Size))
-
-		if i < len(deltaArchiveManifest.Partitions)-1 {
-			fmt.Printf(", ")
-		} else {
-			fmt.Printf("\n")
-		}
-	}
-	p.initialized = true
-
-	return nil
-}
-
-func (p *Payload) writeDataBlob(offset int64, length int64) ([]byte, error) {
-	if _, err := p.file.Seek(offset, 0); err != nil {
-		return nil, err
-	}
-
-	buf := make([]byte, length)
-	if _, err := p.file.Read(buf); err != nil {
-		return nil, err
-	}
-
-	return buf, nil
-}
+	
 
 func (p *Payload) Extract(partition *chromeos_update_engine.PartitionUpdate, out *os.File) error {
 	name := partition.GetPartitionName()
@@ -303,9 +238,45 @@ func (p *Payload) Extract(partition *chromeos_update_engine.PartitionUpdate, out
 			return fmt.Errorf("Unhandled operation type: %s", operation.GetType().String())
 		}
 
+		// verify hash
+		hash := hex.EncodeToString(bufSha.Sum(nil))
+		expectedHash := hex.EncodeToString(operation.GetDataSha256Hash())
+		if expectedHash != "" && hash != expectedHash {
+			return fmt.Errorf("Verify failed (Checksum mismatch): %s (%s != %s)", name, hash, expectedHash)
+		}
+	}
 
 	return nil
 }
+
+func (p *Payload) worker() {
+	for req := range p.requests {
+		partition := req.partition
+		targetDirectory := req.targetDirectory
+
+		name := fmt.Sprintf("%s.img", partition.GetPartitionName())
+		filepath := fmt.Sprintf("%s/%s", targetDirectory, name)
+		file, err := os.OpenFile(filepath, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0755)
+		if err != nil {
+		}
+		if err := p.Extract(partition, file); err != nil {
+			fmt.Println(err.Error())
+		}
+
+		p.workerWG.Done()
+	}
+}
+
+func (p *Payload) spawnExtractWorkers(n int) {
+	for i := 0; i < n; i++ {
+		go p.worker()
+	}
+}
+
+func (p *Payload) ExtractSelected(targetDirectory string, partitions []string) error {
+	if !p.initialized {
+		return errors.New("Payload has not been initialized")
+	}
 	p.progress = mpb.New()
 
 	p.requests = make(chan *request, 100)
@@ -332,4 +303,8 @@ func (p *Payload) Extract(partition *chromeos_update_engine.PartitionUpdate, out
 	close(p.requests)
 
 	return nil
+}
+
+func (p *Payload) ExtractAll(targetDirectory string) error {
+	return p.ExtractSelected(targetDirectory, nil)
 }
