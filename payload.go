@@ -102,10 +102,10 @@ func (ph *payloadHeader) ReadFromPayload() error {
 }
 
 // NewPayload creates a new Payload struct
-func NewPayload(filename string) *Payload {
-	payload := &Payload{
-		Filename:   filename,
-		concurrency: runtime.NumCPU(),
+func NewPayload(filename string) Payload {
+	payload := Payload{
+		Filename:    filename,
+		concurrency: 4,
 	}
 
 	return payload
@@ -150,7 +150,72 @@ func (p *Payload) readMetadataSignature() (*chromeos_update_engine.Signatures, e
 		return nil, err
 	}
 
-	
+	buf := make([]byte, p.header.MetadataSignatureLen)
+	if _, err := p.file.Read(buf); err != nil {
+		return nil, err
+	}
+	signatures := &chromeos_update_engine.Signatures{}
+	if err := proto.Unmarshal(buf, signatures); err != nil {
+		return nil, err
+	}
+
+	return signatures, nil
+}
+
+func (p *Payload) Init() error {
+	// Read Header
+	p.header = &payloadHeader{
+		payload: p,
+	}
+	if err := p.header.ReadFromPayload(); err != nil {
+		return err
+	}
+
+	// Read Manifest
+	deltaArchiveManifest, err := p.readManifest()
+	if err != nil {
+		return err
+	}
+	p.deltaArchiveManifest = deltaArchiveManifest
+
+	// Read Signatures
+	signatures, err := p.readMetadataSignature()
+	if err != nil {
+		return err
+	}
+	p.signatures = signatures
+
+	// Update sizes
+	p.metadataSize = int64(p.header.Size + p.header.ManifestLen)
+	p.dataOffset = p.metadataSize + int64(p.header.MetadataSignatureLen)
+
+	fmt.Println("Found partitions:")
+	for i, partition := range p.deltaArchiveManifest.Partitions {
+		fmt.Printf("%s (%s)", partition.GetPartitionName(), humanize.Bytes(*partition.GetNewPartitionInfo().Size))
+
+		if i < len(deltaArchiveManifest.Partitions)-1 {
+			fmt.Printf(", ")
+		} else {
+			fmt.Printf("\n")
+		}
+	}
+	p.initialized = true
+
+	return nil
+}
+
+func (p *Payload) readDataBlob(offset int64, length int64) ([]byte, error) {
+	buf := make([]byte, length)
+	n, err := p.file.ReadAt(buf, p.dataOffset+offset)
+	if err != nil {
+		return nil, err
+	}
+	if int64(n) != length {
+		return nil, fmt.Errorf("Read length mismatch: %d != %d", n, length)
+	}
+
+	return buf, nil
+}
 
 func (p *Payload) Extract(partition *chromeos_update_engine.PartitionUpdate, out *os.File) error {
 	name := partition.GetPartitionName()
