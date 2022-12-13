@@ -681,10 +681,6 @@ func (p *Payload) Extract(partition *chromeos_update_engine.PartitionUpdate, out
 
 	return nil
 }
-func (p *Payload) ExtractSelected(targetDirectory string, partitions []string) error {
-	if !p.initialized {
-		return errors.New("Payload has not been initialized")
-	}
 	p.progress = mpb.New()
 
 	p.requests = make(chan *request, 100)
